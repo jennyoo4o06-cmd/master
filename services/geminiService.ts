@@ -43,3 +43,41 @@ export const extractInvoiceData = async (file: File): Promise<InvoiceData> => {
     throw new Error(error.message || "AI 识别服务异常");
   }
 };
+import { GoogleGenAI, Type } from "@google/genai";
+
+export const extractInvoiceData = async (file: File) => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  
+  if (!apiKey) {
+    console.error('错误: VITE_GEMINI_API_KEY 缺失');
+    throw new Error("环境变量 VITE_GEMINI_API_KEY 未配置");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+  
+  const reader = new FileReader();
+  const base64Promise = new Promise<string>((resolve) => {
+    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+    reader.readAsDataURL(file);
+  });
+  
+  const base64Data = await base64Promise;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: {
+        parts: [
+          { inlineData: { data: base64Data, mimeType: file.type } },
+          { text: "请识别这张发票并返回 JSON。包含字段: invoiceNumber, amount, category, sellerName, buyerName, sellerTaxId, buyerTaxId。" }
+        ]
+      },
+      config: { responseMimeType: "application/json" }
+    });
+
+    return JSON.parse(response.text || '{}');
+  } catch (err: any) {
+    console.error('Gemini 识别详情报错:', err);
+    throw new Error(err.message || "AI 识别失败");
+  }
+};
