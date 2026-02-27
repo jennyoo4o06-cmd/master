@@ -108,9 +108,11 @@ const App: React.FC = () => {
       setFiles(prev => prev.map(f => f.id === item.id ? { 
         ...f, status: 'completed', extractedData: data, isBuyerValid, isDuplicate 
       } : f));
-    } catch (err) {
+   } catch (err: any) {
       console.error(err);
-      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', error: '识别失败' } : f));
+      // 将 err.message 显示出来，这样我们就能看到具体原因
+      const errorMessage = err.message || '识别失败';
+      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', error: errorMessage } : f));
     }
   };
 
