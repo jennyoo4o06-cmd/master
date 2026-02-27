@@ -97,7 +97,7 @@ const App: React.FC = () => {
     newFiles.forEach(processFile);
   };
 
-  const processFile = async (item: ProcessingFile) => {
+const processFile = async (item: ProcessingFile) => {
     setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'processing' } : f));
     try {
       const data = await extractInvoiceData(item.file);
@@ -106,16 +106,20 @@ const App: React.FC = () => {
       const isDuplicate = records.some(r => r.invoiceNumber.trim().toUpperCase() === data.invoiceNumber.trim().toUpperCase());
       
       setFiles(prev => prev.map(f => f.id === item.id ? { 
-        ...f, status: 'completed', extractedData: data, isBuyerValid, isDuplicate 
+        ...f, 
+        status: 'completed', 
+        extractedData: data, 
+        isBuyerValid, 
+        isDuplicate 
       } : f));
-   } catch (err: any) {
-      console.error(err);
-      // 将 err.message 显示出来，这样我们就能看到具体原因
+    } catch (err: any) {
+      console.error('文件处理报错详情:', err);
+      // 将报错信息显示在界面上
       const errorMessage = err.message || '识别失败';
       setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', error: errorMessage } : f));
     }
   };
-
+  
   const handleRemoveFile = (id: string) => {
     setFiles(prev => {
       const fileToRemove = prev.find(f => f.id === id);
@@ -358,15 +362,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-const processFile = async (item: ProcessingFile) => {
-    setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'processing' } : f));
-    try {
-      const data = await extractInvoiceData(item.file);
-      // ... 正常逻辑 ...
-      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'completed', extractedData: data } : f));
-    } catch (err: any) {
-      console.error('文件处理报错:', err);
-      // 这里的 err.message 会显示具体的报错原因
-      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', error: err.message || '识别失败' } : f));
-    }
-  };
