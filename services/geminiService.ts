@@ -1,71 +1,45 @@
-
-import { GoogleGenAI, Type, Chat } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { InvoiceData } from "../types";
 
 const fileToGenerativePart = async (file: File) => {
   const base64EncodedDataPromise = new Promise<string>((resolve) => {
     const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = (reader.result as string).split(',')[1];
-      resolve(base64);
-    };
+    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
     reader.readAsDataURL(file);
   });
-  return {
-    inlineData: {
-      data: await base64EncodedDataPromise,
-      mimeType: file.type,
-    },
-  };
+  return { inlineData: { data: await base64EncodedDataPromise, mimeType: file.type } };
 };
 
 export const extractInvoiceData = async (file: File): Promise<InvoiceData> => {
-  // 采用 gemini-3-flash-preview 提供最快响应
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // 优先从环境变量获取，Vite 生产环境通常使用 import.meta.env
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  
+  if (!apiKey || apiKey === 'undefined') {
+    throw new Error("未检测到 GEMINI_API_KEY，请在 Vercel 环境变量中配置 VITE_GEMINI_API_KEY");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const docPart = await fileToGenerativePart(file);
   
-  // 进一步精简 Prompt 以降低 Token 消耗并提升生成速度
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: {
-      parts: [
-        docPart,
-        { text: "Output JSON ONLY. Required fields: invoiceNumber, sellerName, buyerName, sellerTaxId, buyerTaxId, sellerBankAccount, category, amount. For Buyer Name/TaxID, look for '购买方' or '付款人'. For Seller Bank, look for '开户行及账号'. Amount is the '合计' or '价税合计'." }
-      ]
-    },
-    config: {
-      responseMimeType: "application/json",
-      thinkingConfig: { thinkingBudget: 0 }, // OCR 任务禁用思维链以提速
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          invoiceNumber: { type: Type.STRING },
-          sellerName: { type: Type.STRING },
-          buyerName: { type: Type.STRING },
-          sellerTaxId: { type: Type.STRING },
-          buyerTaxId: { type: Type.STRING },
-          sellerBankAccount: { type: Type.STRING },
-          category: { type: Type.STRING },
-          amount: { type: Type.NUMBER }
-        },
-        required: ["invoiceNumber", "sellerName", "buyerName", "sellerTaxId", "buyerTaxId", "category", "amount"]
-      }
-    }
-  });
-
-  const text = response.text || '{}';
   try {
-    return JSON.parse(text) as InvoiceData;
-  } catch (e) {
-    console.error("JSON Parse Error:", text);
-    throw new Error("Failed to parse invoice data");
-  }
-};
+    const response = await ai.models.generateContent({
+      model: 'gemini-1.5-flash', // 使用更稳定的版本
+      contents: {
+        parts: [
+          docPart,
+          { text: "你是一个发票识别专家。请从图片中提取以下 JSON 格式信息：invoiceNumber (发票号码), sellerName (销售方名称), buyerName (购买方名称), sellerTaxId (销售方纳税人识别号), buyerTaxId (购买方纳税人识别号), sellerBankAccount (销售方开户行及账号), category (货物或服务名称), amount (价税合计金额，数字类型)。只需输出 JSON。" }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
 
-export const createChat = (systemInstruction: string): Chat => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  return ai.chats.create({
-    model: 'gemini-3-flash-preview',
-    config: { systemInstruction },
-  });
+    const text = response.text;
+    if (!text) throw new Error("AI 未返回任何识别结果");
+    return JSON.parse(text) as InvoiceData;
+  } catch (error: any) {
+    console.error("Gemini Error:", error);
+    throw new Error(error.message || "AI 识别服务异常");
+  }
 };
