@@ -358,3 +358,15 @@ const App: React.FC = () => {
 };
 
 export default App;
+const processFile = async (item: ProcessingFile) => {
+    setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'processing' } : f));
+    try {
+      const data = await extractInvoiceData(item.file);
+      // ... 正常逻辑 ...
+      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'completed', extractedData: data } : f));
+    } catch (err: any) {
+      console.error('文件处理报错:', err);
+      // 这里的 err.message 会显示具体的报错原因
+      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', error: err.message || '识别失败' } : f));
+    }
+  };
